@@ -5,5 +5,5 @@ pydantic-settings==2.4.0
 python-dotenv==1.0.1
 numpy==1.26.4
 pandas==2.2.3
+scikit-learn==1.5.2
 requests==2.32.3
-# Deja fuera: scipy, statsmodels, scikit-learn, xarray, netCDF4, dask, bottleneck, pydap, earthaccess
