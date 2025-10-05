@@ -1,0 +1,15 @@
+# --- Parte del git ingore para el backend ---
+
+__pycache__/
+*.pyc
+.env
+.env
+*.sqlite
+.cache/
+.DS_Store
+.idea/
+.vscode/
+*.ipynb_checkpoints
+
+
+# --- Parte del git ignore para Frontend ---

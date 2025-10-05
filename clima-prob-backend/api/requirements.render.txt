@@ -1,0 +1,9 @@
+fastapi==0.115.5
+uvicorn[standard]==0.30.6
+gunicorn==22.0.0
+pydantic-settings==2.4.0
+python-dotenv==1.0.1
+numpy==1.26.4
+pandas==2.2.3
+requests==2.32.3
+# Deja fuera: scipy, statsmodels, scikit-learn, xarray, netCDF4, dask, bottleneck, pydap, earthaccess
