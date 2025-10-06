@@ -40,6 +40,8 @@ def giovanni_token() -> str:
 
     # Probar múltiples URLs automáticamente
     last_error = None
+    token_received = False
+    
     for url_idx, signin_url in enumerate(signin_urls):
         logger.info(f"🎯 Trying URL {url_idx + 1}/{len(signin_urls)}: {signin_url.split('/')[-1]}")
         
@@ -55,8 +57,20 @@ def giovanni_token() -> str:
                     timeout=90,  # Timeout más largo
                 )
                 
-                # Si llegamos aquí, fue exitoso
-                logger.info(f"✅ Success with URL: {signin_url.split('/')[-1]}")
+                # Verificar si la respuesta es un token válido (no HTML)
+                logger.info(f"✅ Connection success with URL: {signin_url.split('/')[-1]}")
+                
+                # Verificar el contenido de la respuesta antes de aceptarla
+                ctype = r.headers.get("Content-Type", "").lower()
+                txt = r.text.strip()
+                if "text/html" in ctype or txt.lower().startswith("<!doctype html") or "<html" in txt.lower():
+                    logger.warning(f"⚠️ URL {signin_url.split('/')[-1]} returned HTML (authorization issue) - trying next URL")
+                    # No hacer break, continuar con siguiente URL
+                    break  # Sale del loop de attempts, continúa con siguiente URL
+                
+                logger.info(f"✅ Valid token received from: {signin_url.split('/')[-1]}")
+                # Éxito real - marcar y salir de ambos loops
+                token_received = True
                 break
                 
             except requests.exceptions.RequestException as e:
@@ -70,26 +84,27 @@ def giovanni_token() -> str:
             # Si todos los intentos de esta URL fallaron, continuar con la siguiente
             continue
         
-        # Si llegamos aquí, una URL funcionó
-        break
+        # Si obtuvimos un token válido, salir del loop principal
+        if token_received:
+            break
     else:
         # Si todas las URLs fallaron
         raise RuntimeError(f"All Giovanni URLs failed. Last error: {str(last_error)}")
+    
+    # Si no obtuvimos token válido después de probar todas las URLs
+    if not token_received:
+        raise RuntimeError("All Giovanni URLs returned HTML (authorization issues). Check your NASA Earthdata account permissions.")
 
-    # 401/403 => credenciales malas o app no autorizada
+    # Procesar el token (r ya contiene la respuesta exitosa)
     if r.status_code in (401, 403):
         raise RuntimeError(f"EDL signin inválido ({r.status_code}). Revisa usuario/clave y autoriza GES DISC/Giovanni en tu cuenta.")
 
     r.raise_for_status()
 
-    # Si mandan HTML (página de login), no es un token
-    ctype = r.headers.get("Content-Type", "").lower()
-    txt = r.text.strip()
-    if "text/html" in ctype or txt.lower().startswith("<!doctype html") or "<html" in txt.lower():
-        raise RuntimeError("EDL devolvió HTML (no token). Debes iniciar sesión y autorizar 'NASA GESDISC DATA ARCHIVE / Giovanni' en https://urs.earthdata.nasa.gov (Applications).")
-
-    token = txt.replace('"', "").strip()
+    # Extraer y limpiar el token
+    token = r.text.replace('"', "").strip()
     if not token or " " in token or "<" in token:
         raise RuntimeError("Token EDL inesperado. Respuesta no parece un token válido.")
 
+    logger.info(f"🎉 Token obtained successfully: {token[:20]}...")
     return token
