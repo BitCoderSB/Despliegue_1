@@ -7,11 +7,9 @@ app = FastAPI(title="Weather Likelihood API", version="0.2.0")
 
 @app.get("/health")  
 def health():
-    mode = "synthetic" if settings.OFFLINE_MODE else "live"
     return {
         "ok": True, 
-        "mode": mode,
-        "offline_mode": settings.OFFLINE_MODE,
+        "mode": "live",
         "earthdata_configured": bool(settings.EARTHDATA_USERNAME and settings.EARTHDATA_PASSWORD)
     }
 
