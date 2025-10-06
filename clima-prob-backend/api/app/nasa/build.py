@@ -8,12 +8,12 @@ logger = logging.getLogger(__name__)
 
 def build_dataset(lat: float, lon: float, start_iso: str, end_iso: str) -> pd.DataFrame:
     """
-    Construye dataset combinando GLDAS + IMERG - solo datos reales de NASA
+    Construye dataset combinando GLDAS + IMERG - solo datos reales de NASA Giovanni
     """
     
-    logger.info("🌍 Fetching real NASA data...")
+    logger.info("🌍 Fetching real NASA data from Giovanni...")
     
-    # Solo intentar datos reales - sin fallback sintético por ahora
+    # Solo usar Giovanni como fuente de datos
     gldas = gldas_daily_series(lat, lon, start_iso, end_iso)
     logger.info("✅ GLDAS data fetched successfully")
     
