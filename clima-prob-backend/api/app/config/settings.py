@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     EARTHDATA_USERNAME: str | None = None
     EARTHDATA_PASSWORD: str | None = None
 
-    GIOVANNI_SIGNIN_URL: str = "https://api.giovanni.earthdata.nasa.gov/signin"
+    GIOVANNI_SIGNIN_URL: str = "https://api.giovanni.earthdata.nasa.gov/gettoken"
     GIOVANNI_TS_URL: str = "https://api.giovanni.earthdata.nasa.gov/timeseries"
 
     OFFLINE_MODE: bool = False  # por si quieres apagar llamadas externas en dev
