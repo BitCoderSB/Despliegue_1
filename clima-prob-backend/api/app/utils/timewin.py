@@ -12,7 +12,7 @@ def ensure_daily_index(df: pd.DataFrame) -> pd.DataFrame:
 def doy365(idx: pd.DatetimeIndex) -> np.ndarray:
     months = idx.month.values
     days   = idx.day.values
-    days = np.where((months == 2) & (days == 29), 28, days)  # 29-feb -> 28-feb
+    days = np.where((months == 2) & (days == 29), 28, days)
     return _DOY_CUM[months - 1] + days
 
 def window_mask(idx: pd.DatetimeIndex, date_of_interest: pd.Timestamp, window_days: int) -> np.ndarray:

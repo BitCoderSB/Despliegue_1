@@ -29,11 +29,11 @@ def giovanni_timeseries(data_id: str, lat: float, lon: float, start_iso: str, en
     params = {"data": data_id, "location": f"[{lat},{lon}]", "time": f"{start_iso}/{end_iso}"}
     r = requests.get(TS_URL, params=params, headers={"authorizationtoken": token}, timeout=120)
     r.raise_for_status()
-    # parser robusto (si el formateo cambia, parse_giovanni_csv lo maneja)
+
     try:
         return parse_giovanni_csv(r.text)
     except Exception:
-        # fallback al parser "oficial" usado en el notebook
+
         with io.StringIO(r.text) as f:
             headers_kv = {}
             for _ in range(40):

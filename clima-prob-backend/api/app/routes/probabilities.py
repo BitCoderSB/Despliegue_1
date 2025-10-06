@@ -1,15 +1,17 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from datetime import date, timedelta
+from typing import Optional, Dict, List
 import pandas as pd
 import traceback
 import logging
 
 from ..nasa.build import build_dataset
-from ..prob.thresholds import Thresholds, make_thresholds_from_df
+from ..prob.thresholds import make_thresholds_from_df
 from ..prob.compute import compute_probabilities
+from ..prob.analytics import monthly_climatology, window_percentiles
 
-# Configurar logging
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,7 @@ class ProbabilitiesRequest(BaseModel):
     date_of_interest: date
     engine: str = Field("empirical", pattern="^(logistic|empirical)$")
     window_days: int = Field(7, ge=0, le=30)
-    thresholds: ThresholdsIn | None = None  # si no vienen, se calculan adaptativos
+    thresholds: ThresholdsIn | None = None
 
 @router.post("/probabilities")
 def probabilities(req: ProbabilitiesRequest):
@@ -41,8 +43,6 @@ def probabilities(req: ProbabilitiesRequest):
         end_iso   = f"{req.end_date.isoformat()}T23:59:59"
         
         logger.info(f"📅 Time range: {start_iso} to {end_iso}")
-
-        # Paso 1: Obtener datos NASA
         try:
             logger.info("🌍 Fetching NASA data...")
             df = build_dataset(req.lat, req.lon, start_iso, end_iso)
@@ -57,13 +57,11 @@ def probabilities(req: ProbabilitiesRequest):
             logger.error(f"Full traceback: {traceback.format_exc()}")
             raise HTTPException(status_code=500, detail=f"NASA data extraction failed: {str(e)}")
 
-        # Paso 2: Calcular thresholds
         try:
             logger.info("📈 Calculating thresholds...")
             if req.thresholds is None or all(getattr(req.thresholds, k) is None for k in req.thresholds.model_fields):
                 thr = make_thresholds_from_df(df, req.date_of_interest.isoformat(), window_days=req.window_days)
             else:
-                # mezcla: usa los que vinieron y completa con adaptativos si hay None
                 base = make_thresholds_from_df(df, req.date_of_interest.isoformat(), window_days=req.window_days)
                 user = {k: getattr(req.thresholds, k) for k in base.keys()}
                 thr = {k: (user[k] if user[k] is not None else base[k]) for k in base.keys()}
@@ -72,7 +70,7 @@ def probabilities(req: ProbabilitiesRequest):
             logger.error(f"❌ Threshold calculation failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Threshold calculation failed: {str(e)}")
 
-        # Paso 3: Calcular probabilidades
+
         try:
             logger.info(f"🎯 Computing probabilities with engine={req.engine}...")
             probs = compute_probabilities(
@@ -84,32 +82,73 @@ def probabilities(req: ProbabilitiesRequest):
             logger.error(f"❌ Probability computation failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Probability computation failed: {str(e)}")
 
-        # Paso 4: Generar series para gráficas
         try:
+            logger.info("📊 Generating plot series...")
             end_d = req.date_of_interest
             start_d = end_d - timedelta(days=29)
             last30 = df.loc[start_d.isoformat():end_d.isoformat()]
-            series_T = [{"date": d.date().isoformat(), "value": float(v)} for d, v in last30["Tmax_C"].dropna().items()] if "Tmax_C" in df else []
-            series_P = [{"date": d.date().isoformat(), "value": float(v)} for d, v in last30["P_mmday"].dropna().items()] if "P_mmday" in df else []
+            series_T = (
+                [{"date": d.date().isoformat(), "value": float(v)} for d, v in last30["Tmax_C"].dropna().items()]
+                if "Tmax_C" in df.columns else []
+            )
+            series_P = (
+                [{"date": d.date().isoformat(), "value": float(v)} for d, v in last30["P_mmday"].dropna().items()]
+                if "P_mmday" in df.columns else []
+            )
         except Exception as e:
-            # No es crítico, puede devolver arrays vacíos
+            logger.warning(f"⚠️ Plot series generation failed (non-critical): {str(e)}")
             series_T, series_P = [], []
 
+        try:
+            logger.info("📈 Generating charts data...")
+            vars_for_clim = [v for v in ["Tmax_C","Tmin_C","WS_ms","P_mmday","HI_C"] if v in df.columns]
+            clim = monthly_climatology(df, variables=vars_for_clim, qextras=None)
+            win_stats = window_percentiles(
+                df_daily=df,
+                date_of_interest=req.date_of_interest.isoformat(),
+                window_days=req.window_days,
+                thresholds=thr,
+                variables=vars_for_clim
+            )
+            logger.info("✅ Charts data generated successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ Charts generation failed (non-critical): {str(e)}")
+            clim, win_stats = {}, {}
+
+
         return {
-            "location": {"lat": req.lat, "lon": req.lon, "date_of_interest": req.date_of_interest.isoformat()},
+            "location": {
+                "lat": req.lat, "lon": req.lon,
+                "period": f"{req.start_date}..{req.end_date}",
+                "date_of_interest": req.date_of_interest.isoformat()
+            },
             "probabilities": probs,
             "series_for_plots": {
                 "daily_Tmax_C_last30": series_T,
                 "daily_P_mmday_last30": series_P
             },
-            "meta": {"units": {"Tmax_C":"°C","P_mmday":"mm/day"}, "thresholds": thr}
+            "charts": {
+                "monthly_climatology": clim,
+                "window_percentiles": win_stats
+            },
+            "meta": {
+                "engine": req.engine,
+                "window_days": req.window_days,
+                "units": {
+                    "Tmax_C":"°C",
+                    "Tmin_C":"°C",
+                    "WS_ms":"m s^-1",
+                    "P_mmday":"mm day^-1",
+                    "HI_C":"°C",
+                    "RH_pct":"%"
+                },
+                "thresholds": thr
+            }
         }
     
     except HTTPException:
-        # Re-raise HTTP exceptions
         raise
     except Exception as e:
-        # Catch-all para errores no manejados
         error_detail = f"Unexpected error: {str(e)}"
-        print(f"Full traceback: {traceback.format_exc()}")  # Para logs de Render
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=error_detail)

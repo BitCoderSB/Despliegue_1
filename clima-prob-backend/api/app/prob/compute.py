@@ -15,7 +15,7 @@ def compute_probabilities(
     thr = Thresholds(**thresholds)
 
     if engine == "logistic":
-        # import perezoso: evita requerir scikit-learn si no se usa
+
         try:
             from .logit import logistic_probabilities
         except Exception as e:
